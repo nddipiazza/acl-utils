@@ -14,6 +14,8 @@ import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 public class AclUserList {
   @Option(name = "-solrZkHosts", usage = "The zookeeper hosts string for the solr access control", required = true)
@@ -79,15 +81,29 @@ public class AclUserList {
           String nextsGraphQuery = lineIterator.nextLine();
           SolrQuery query = new SolrQuery();
           query.set("q", nextsGraphQuery);
-          query.setRows(1);
           query.set("fl", "id");
-          System.out.println(nextsGraphQuery);
-          QueryResponse qr = solrClient.query(aclCollection, query);
-          if (qr.getResults().isEmpty()) {
+          query.setRows(10000);
+          query.setSort(SolrQuery.SortClause.asc("id"));
+          Set<String> ids = new HashSet<>();
+          String cursorMark = CursorMarkParams.CURSOR_MARK_START;
+          boolean done = false;
+          while (!done) {
+            query.set(CursorMarkParams.CURSOR_MARK_PARAM, cursorMark);
+            QueryResponse qr = solrClient.query(aclCollection, query);
+            String nextCursorMark = qr.getNextCursorMark();
+            for (SolrDocument sd : qr.getResults()) {
+              ids.add((String)sd.getFirstValue("id"));
+            }
+            if (cursorMark.equals(nextCursorMark)) {
+              done = true;
+            }
+            cursorMark = nextCursorMark;
+          }
+
+
+          if (ids.isEmpty()) {
             System.out.println("No match for " + nextsGraphQuery);
           }
-          SolrDocument entries = qr.getResults().get(0);
-          Collection<Object> ids = entries.getFieldValues("id");
           bw.write(String.format("%s\t%d\t%s%n", nextsGraphQuery, ids.size(), StringUtils.join(ids, ",")));
         }
       }
