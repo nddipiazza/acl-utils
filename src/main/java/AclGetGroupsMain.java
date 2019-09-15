@@ -57,15 +57,19 @@ public class AclGetGroupsMain {
     }
 
     private void export() throws Exception {
+        int count = 0;
         try (CloudSolrClient solrClient = new CloudSolrClient.Builder(Arrays.asList(solrZkHosts), Optional.of(solrZkChroot))
                 .withConnectionTimeout(10000)
                 .withSocketTimeout(60000)
                 .build();
-             FileReader fileReader = new FileReader(outputCsvFile);
+             FileReader fileReader = new FileReader(usersCsvFile);
              LineIterator lineIterator = new LineIterator(fileReader);
              FileWriter fw = new FileWriter(outputCsvFile);
              BufferedWriter bw = new BufferedWriter(fw)) {
             while (lineIterator.hasNext()) {
+                if (++count % 100 == 0) {
+                    System.out.println("On count " + count);
+                }
                 long startedOn = System.currentTimeMillis();
                 String nextUserId = lineIterator.nextLine();
                 String nextGraphQuery = String.format("{!graph from=\"inbound_ss\" to=\"outbound_ss\"}id:%s%n", ClientUtils.escapeQueryChars(nextUserId));

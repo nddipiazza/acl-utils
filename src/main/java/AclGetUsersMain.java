@@ -51,12 +51,16 @@ public class AclGetUsersMain {
   }
 
   private void export() throws Exception {
+    int count = 0;
     try (CloudSolrClient solrClient = new CloudSolrClient.Builder(Arrays.asList(solrZkHosts), Optional.of(solrZkChroot))
         .withConnectionTimeout(10000)
         .withSocketTimeout(60000)
         .build()) {
       try (FileWriter fw = new FileWriter(outputCsvFile);
            BufferedWriter bw = new BufferedWriter(fw)) {
+        if (++count % 100 == 0) {
+          System.out.println("On count " + count);
+        }
         SolrQuery query = new SolrQuery();
         query.set("q", userQuery);
         query.setRows(10000);
@@ -69,7 +73,7 @@ public class AclGetUsersMain {
           QueryResponse qr = solrClient.query(aclCollection, query);
           String nextCursorMark = qr.getNextCursorMark();
           for (SolrDocument sd : qr.getResults()) {
-            bw.write(String.format("id:%s%n", sd.getFirstValue("id")));
+            bw.write(String.format("%s%n", sd.getFirstValue("id")));
           }
           if (cursorMark.equals(nextCursorMark)) {
             done = true;
