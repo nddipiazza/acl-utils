@@ -39,6 +39,10 @@ public class AclGetGroupsMain {
     @Option(name = "-outputCsvFile", usage = "The output csv file which contains the users and the groups those users are a part of.", required = true)
     private String outputCsvFile;
 
+    @SuppressWarnings(value = "unused")
+    @Option(name = "-countOnly", usage = "Count the groups only.")
+    private boolean countOnly = false;
+
     /**
      * @param args
      * @throws Exception
@@ -75,30 +79,36 @@ public class AclGetGroupsMain {
                 String nextGraphQuery = String.format("{!graph from=\"inbound_ss\" to=\"outbound_ss\"}id:%s%n", ClientUtils.escapeQueryChars(nextUserId));
                 SolrQuery query = new SolrQuery();
                 query.set("q", nextGraphQuery);
-                query.set("fl", "id");
-                query.setRows(10000);
-                query.setSort(SolrQuery.SortClause.asc("id"));
-                Set<String> ids = new HashSet<>();
-                String cursorMark = CursorMarkParams.CURSOR_MARK_START;
-                boolean done = false;
-                while (!done) {
-                    query.set(CursorMarkParams.CURSOR_MARK_PARAM, cursorMark);
+                if (countOnly) {
+                    query.setRows(0);
                     QueryResponse qr = solrClient.query(aclCollection, query);
-                    String nextCursorMark = qr.getNextCursorMark();
-                    for (SolrDocument sd : qr.getResults()) {
-                        ids.add((String) sd.getFirstValue("id"));
+                    bw.write(String.format("%s\t%d\t%d%n", nextGraphQuery, qr.getResults().getNumFound(), System.currentTimeMillis() - startedOn));
+                } else {
+                    query.set("fl", "id");
+                    query.setRows(10000);
+                    query.setSort(SolrQuery.SortClause.asc("id"));
+                    Set<String> ids = new HashSet<>();
+                    String cursorMark = CursorMarkParams.CURSOR_MARK_START;
+                    boolean done = false;
+                    while (!done) {
+                        query.set(CursorMarkParams.CURSOR_MARK_PARAM, cursorMark);
+                        QueryResponse qr = solrClient.query(aclCollection, query);
+                        String nextCursorMark = qr.getNextCursorMark();
+                        for (SolrDocument sd : qr.getResults()) {
+                            ids.add((String) sd.getFirstValue("id"));
+                        }
+                        if (cursorMark.equals(nextCursorMark)) {
+                            done = true;
+                        }
+                        cursorMark = nextCursorMark;
                     }
-                    if (cursorMark.equals(nextCursorMark)) {
-                        done = true;
+
+                    if (ids.isEmpty()) {
+                        System.out.println("No match for " + nextGraphQuery);
                     }
-                    cursorMark = nextCursorMark;
+                    bw.write(String.format("%s\t%d\t%d\t%s%n", nextGraphQuery, ids.size(), System.currentTimeMillis() - startedOn, StringUtils.join(ids, ",")));
                 }
 
-
-                if (ids.isEmpty()) {
-                    System.out.println("No match for " + nextGraphQuery);
-                }
-                bw.write(String.format("%s\t%d\t%d\t%s%n", nextGraphQuery, ids.size(), System.currentTimeMillis() - startedOn, StringUtils.join(ids, ",")));
             }
         }
     }
